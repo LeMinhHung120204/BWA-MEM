@@ -7,6 +7,72 @@ from bwa import * # bwa_verbose trong file bwa.c chưa hiểu cách xử lý
 from kvec import *
 from bwt import *
 
+
+MEM_MAPQ_COEF = 30.0
+MEM_MAPQ_MAX = 60
+
+MEM_F_PE = 0x2
+MEM_F_NOPAIRING = 0x4
+MEM_F_ALL = 0x8
+MEM_F_NO_MULTI = 0x10
+MEM_F_NO_RESCUE = 0x20
+MEM_F_REF_HDR = 0x100
+MEM_F_SOFTCLIP = 0x200
+MEM_F_SMARTPE = 0x400
+MEM_F_PRIMARY5 = 0x800
+MEM_F_KEEP_SUPP_MAPQ = 0x1000
+MEM_F_XB = 0x2000
+
+class MemAlnReg:
+    def __init__(self):
+        self.rb = self.re = 0
+        self.qb = self.qe = 0
+        self.rid = 0
+        self.score = 0
+        self.truesc = 0
+        self.sub = 0
+        self.alt_sc = 0
+        self.csub = 0
+        self.sub_n = 0
+        self.w = 0
+        self.seedcov = 0
+        self.secondary = 0
+        self.secondary_all = 0
+        self.seedlen0 = 0
+        self.n_comp = 0
+        self.is_alt = 0
+        self.frac_rep = 0.0
+        self.hash = 0
+
+class MemAlnRegV:
+    def __init__(self):
+        self.n = self.m = 0
+        self.a = []
+
+class MemPestat:
+    def __init__(self):
+        self.low = self.high = 0
+        self.failed = 0
+        self.avg = 0.0
+        self.std = 0.0
+
+class MemAln:
+    def __init__(self):
+        self.pos = 0
+        self.rid = 0
+        self.flag = 0
+        self.is_rev = 0
+        self.is_alt = 0
+        self.mapq = 0
+        self.NM = 0
+        self.n_cigar = 0
+        self.cigar = []
+        self.XA = None
+        self.score = 0
+        self.sub = 0
+        self.alt_sc = 0
+
+
 # Thiết lập các tham số
 class MemOpt:
     def __init__(self):
@@ -399,6 +465,9 @@ def mem_chain2aln(opt, bns, pac, l_query, query, c, av):
 # Integrated interface
 
 
+
+def mem_process_seqs(opt, bwt, bns, pac, n_processed, n, seqs, pes0):
+    pass
 
 # Sử dụng hàm
 if __name__ == "__main__":
