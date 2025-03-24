@@ -356,6 +356,8 @@ def main_mem(argv):
     else:
         update_a(opt, opt0)
 
+    bwa_fill_scmat(opt.a, opt.b, opt.mat)
+    
     # đang làm
 
 if __name__ == "__main__":

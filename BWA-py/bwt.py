@@ -98,11 +98,11 @@ def bwt_smem1a(bwt, length, q, x, min_intv, max_intv, mem, tmpvec):
     if min_intv < 1:
         min_intv = 1
     
-    a = [BWTIntervalVector(), BWTIntervalVector()]
+    a = [bwtintv_v(), bwtintv_v()]
     prev = tmpvec[0] if tmpvec and tmpvec[0] else a[0]
     curr = tmpvec[1] if tmpvec and tmpvec[1] else a[1]
     
-    ik = BWTInterval([0, 0, 0], 0)
+    ik = bwtintv_t([0, 0, 0], 0)
     bwt_set_intv(bwt, q[x], ik)
     ik.info = x + 1
     
@@ -115,7 +115,7 @@ def bwt_smem1a(bwt, length, q, x, min_intv, max_intv, mem, tmpvec):
             break
         elif q[i] < 4:
             c = 3 - q[i]
-            ok = [BWTInterval([0, 0, 0], 0) for _ in range(4)]
+            ok = [bwtintv_t([0, 0, 0], 0) for _ in range(4)]
             bwt_extend(bwt, ik, ok, 0)
             if ok[c].x[2] != ik.x[2]:
                 curr.a.append(ik)
@@ -144,7 +144,7 @@ def bwt_smem1a(bwt, length, q, x, min_intv, max_intv, mem, tmpvec):
         for j in range(prev.n):
             p = prev.a[j]
             if c >= 0 and ik.x[2] >= max_intv:
-                ok = [BWTInterval([0, 0, 0], 0) for _ in range(4)]
+                ok = [bwtintv_t([0, 0, 0], 0) for _ in range(4)]
                 bwt_extend(bwt, p, ok, 1)
             if c < 0 or ik.x[2] < max_intv or ok[c].x[2] < min_intv:
                 if curr.n == 0:

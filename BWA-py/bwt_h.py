@@ -1,32 +1,40 @@
+from dataclasses import dataclass, field
+from typing import List
+
+
 # requirement: (OCC_INTERVAL%16 == 0); please DO NOT change this line because some part of the code assume OCC_INTERVAL=0x80
 OCC_INTV_SHIFT = 7
 OCC_INTERVAL = 1 << OCC_INTV_SHIFT
 OCC_INTV_MASK = OCC_INTERVAL - 1
 
-class BWT:
-    def __init__(self, primary, L2, seq_len, bwt_size, bwt, cnt_table, sa_intv, n_sa, sa):
-        self.primary = primary  # S^{-1}(0), or the primary index of BWT
-        self.L2 = L2  # C(), cumulative count
-        self.seq_len = seq_len  # sequence length
-        self.bwt_size = bwt_size  # size of bwt, about seq_len/4
-        self.bwt = bwt  # BWT
-        # occurrence array, separated into two parts
-        self.cnt_table = cnt_table
-        # suffix array
-        self.sa_intv = sa_intv
-        self.n_sa = n_sa
-        self.sa = sa
+bwtint_t = int  
 
-class BWTInterval:
-    def __init__(self, x, info):
-        self.x = x  # x[0], x[1], x[2]
-        self.info = info
+@dataclass
+class bwt_t:
+    primary: bwtint_t = 0  # S^{-1}(0), or the primary index of BWT
+    L2: List[bwtint_t] = field(default_factory=lambda: [0] * 5)  # C(), cumulative count
+    seq_len: bwtint_t = 0  # Sequence length
+    bwt_size: bwtint_t = 0  # Size of BWT, about seq_len/4
+    bwt: List[int] = field(default_factory=list)  # BWT array
 
-class BWTIntervalVector:
-    def __init__(self):
-        self.n = 0
-        self.m = 0
-        self.a = []  # List of BWTInterval
+    # Occurrence array, separated into two parts
+    cnt_table: List[int] = field(default_factory=lambda: [0] * 256)
+
+    # Suffix array
+    sa_intv: int = 0
+    n_sa: bwtint_t = 0
+    sa: List[bwtint_t] = field(default_factory=list)
+
+@dataclass
+class bwtintv_t:
+    x: List[bwtint_t] = field(default_factory=lambda: [0] * 3)  # Array of 3 elements
+    info: bwtint_t = 0
+
+@dataclass
+class bwtintv_v:
+    n: int = 0  # Current number of elements
+    m: int = 0  # Maximum capacity (not strictly needed in Python)
+    a: List[bwtintv_t] = field(default_factory=list)  # Dynamic list of intervals
 
 # The following two functions are ONLY correct when OCC_INTERVAL == 0x80
 def bwt_bwt(bwt, k):

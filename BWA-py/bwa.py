@@ -1,4 +1,10 @@
+import struct
+from dataclasses import dataclass, field
+from typing import List
+
 from kstring import *
+from bwt import *
+from bntseq import *
 
 BWA_IDX_BWT = 0x1
 BWA_IDX_BNS = 0x2
@@ -14,16 +20,17 @@ BWTALGO_IS = 3
 
 BWA_DBG_QNAME = 0x1
 
-class BwaIdx:
-    def __init__(self):
-        self.bwt = None
-        self.bns = None
-        self.pac = None
-        self.is_shm = 0
-        self.l_mem = 0
-        self.mem = None
+@dataclass
+class bwaidx_t:
+    bwt: bwt_t = field(default_factory=bwt_t)  # FM-index từ Bwt
+    bns: bntseq_t = field(default_factory=bntseq_t)  # Thông tin về reference sequences
+    pac: List[int] = field(default_factory=list)  # 2-bit encoded reference sequences
 
-class BSeq1:
+    is_shm: int = 0
+    l_mem: bwtint_t = 0
+    mem: List[int] = field(default_factory=list)  # Lưu dữ liệu memory
+
+class bseq1_t:
     def __init__(self):
         self.l_seq = 0
         self.id = 0
@@ -51,7 +58,7 @@ def dupkstring(str_obj: kstring_t, dupempty: int) -> str:
         return str_obj.s[:str_obj.l] if str_obj.s else ""
     return None
 
-def kseq2bseq1(ks, s: BSeq1):
+def kseq2bseq1(ks, s: bseq1_t):
     s.name = dupkstring(ks.name, 1)
     s.comment = dupkstring(ks.comment, 0)
     s.seq = dupkstring(ks.seq, 1)
@@ -68,7 +75,7 @@ def bseq_read(chunk_size, n_, ks1, ks2=None):
             print("[W::bseq_read] the 2nd file has fewer sequences.")
             break
         trim_readno(ks.name)
-        seq = BSeq1()
+        seq = bseq1_t()
         kseq2bseq1(ks, seq)
         seq.id = n
         seqs.append(seq)
@@ -76,7 +83,7 @@ def bseq_read(chunk_size, n_, ks1, ks2=None):
         n += 1
         if ks2:
             trim_readno(ks2.name)
-            seq2 = BSeq1()
+            seq2 = bseq1_t()
             kseq2bseq1(ks2, seq2)
             seq2.id = n
             seqs.append(seq2)
@@ -117,6 +124,54 @@ def bwa_fill_scmat(a, b, mat):
     for j in range(5):
         mat[k] = -1
         k += 1
+
+#===============================================================================
+# Full index reader
+
+def bwa_mem2idx(l_mem, mem):
+    idx = bwaidx_t()
+    k = 0
+
+    # Tạo idx.bwt
+    x = struct.calcsize("2q")  # Giả định struct bwt_t có 2 int64_t
+    idx.bwt = bwt_t(*struct.unpack_from("2q", mem, k))
+    k += x
+    x = idx.bwt.bwt_size * 4
+    idx.bwt.bwt = mem[k:k + x]
+    k += x
+    x = idx.bwt.n_sa * 8  # bwtint_t là int64_t
+    idx.bwt.sa = mem[k:k + x]
+    k += x
+
+    # Tạo idx.bns
+    x = struct.calcsize("3q")  # Giả định struct bntseq_t có 3 int64_t
+    idx.bns = bseq1_t(*struct.unpack_from("3q", mem, k))
+    k += x
+    x = idx.bns.n_holes * 8  # bntamb1_t giả định là int64_t
+    idx.bns.ambs = mem[k:k + x]
+    k += x
+    x = idx.bns.n_seqs * struct.calcsize("2q")  # Giả định struct bntann1_t có 2 int64_t
+    idx.bns.anns = [bntann1_t() for _ in range(idx.bns.n_seqs)]
+    k += x
+
+    # Đọc tên và chú thích
+    for ann in idx.bns.anns:
+        end = mem.index(b'\0', k)
+        ann.name = mem[k:end].decode()
+        k = end + 1
+        end = mem.index(b'\0', k)
+        ann.anno = mem[k:end].decode()
+        k = end + 1
+
+    # Tạo idx.pac
+    idx.pac = mem[k:k + idx.bns.l_pac // 4 + 1]
+    k += len(idx.pac)
+
+    assert k == l_mem, "Lỗi: không khớp kích thước bộ nhớ"
+
+    idx.l_mem = k
+    idx.mem = mem
+    return idx
 
 #===============================================================================
 # SAM header routines
