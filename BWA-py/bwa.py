@@ -165,7 +165,7 @@ def bwa_idx_load_bwt(hint: str):
     
     return bwt
 
-def bwa_idx_load_from_disk(hint: str, which: int) -> BwaIndex:
+def bwa_idx_load_from_disk(hint: str, which: int) -> bwaidx_t:
     prefix = bwa_idx_infer_prefix(hint)
     if prefix is None:
         print(f"[E::{bwa_idx_load_from_disk.__name__}] fail to locate the index files")
@@ -190,6 +190,28 @@ def bwa_idx_load_from_disk(hint: str, which: int) -> BwaIndex:
             idx.bns.fp_pac = None  # Giải phóng file sau khi đọc
 
     return idx
+
+
+def bwa_idx_load(hint, which):
+    return bwa_idx_load_from_disk(hint, which)
+
+def bwa_idx_destroy(idx):
+    if idx is None:
+        return
+    if idx.mem is None:
+        if idx.bwt:
+            bwt_destroy(idx.bwt)
+        if idx.bns:
+            bns_destroy(idx.bns)
+        if idx.pac:
+            del idx.pac
+    else:
+        del idx.bwt
+        del idx.bns.anns
+        del idx.bns
+        if not idx.is_shm:
+            del idx.mem
+    del idx
 
 def bwa_mem2idx(l_mem, mem, idx : bwaidx_t):
     k = 0
@@ -235,6 +257,34 @@ def bwa_mem2idx(l_mem, mem, idx : bwaidx_t):
 
 #===============================================================================
 # SAM header routines
+
+def bwa_print_sam_hdr(bns, hdr_line):
+    n_HD = 0
+    n_SQ = 0
+    
+    if hdr_line:
+        n_HD = hdr_line.count("@HD\t")
+        n_SQ = hdr_line.count("@SQ\t")
+    
+    if n_HD == 0:
+        print("@HD\tVN:1.5\tSO:unsorted\tGO:query")
+    elif bwa_verbose >= 2:
+        print("[W::bwa_print_sam_hdr] please don't include @HD with option -H. Continue anyway.", file=sys.stderr)
+    
+    if n_SQ == 0:
+        for ann in bns.anns:
+            print(f"@SQ\tSN:{ann.name}\tLN:{ann.len}", end="")
+            if ann.is_alt:
+                print("\tAH:*")
+            else:
+                print()
+    elif n_SQ != bns.n_seqs and bwa_verbose >= 2:
+        print(f"[W::bwa_print_sam_hdr] {n_SQ} @SQ lines provided with -H; {bns.n_seqs} sequences in the index. Continue anyway.", file=sys.stderr)
+    
+    if hdr_line:
+        print(hdr_line)
+    if 'bwa_pg' in globals():
+        print(bwa_pg)
 
 def bwa_escape(s: str) -> str:
     p = 0

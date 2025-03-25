@@ -223,3 +223,10 @@ def bwt_restore_bwt(fn):
     bwt_gen_cnt_table(bwt)
 
     return bwt
+
+def bwt_destroy(bwt):
+    if bwt is None:
+        return
+    del bwt.sa
+    del bwt.bwt
+    del bwt
