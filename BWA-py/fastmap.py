@@ -5,6 +5,7 @@ import string
 
 from bwa import *
 from bwamem import *
+from bwashm import *
 
 class KtpAux:
     def __init__(self):
@@ -358,6 +359,7 @@ def main_mem(argv):
 
     bwa_fill_scmat(opt.a, opt.b, opt.mat)
     
+    aux.idx = bwa_idx_load_from_shm(argv[arg])
     # đang làm
 
 if __name__ == "__main__":

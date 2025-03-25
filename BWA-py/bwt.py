@@ -1,4 +1,7 @@
 from bwt_h import *
+import struct
+from utils import *
+import os
 
 def __occ_aux4(bwt, b):
     """Tính tổng số lần xuất hiện của các ký tự trong một đoạn của chuỗi BWT"""
@@ -164,3 +167,59 @@ def bwt_smem1a(bwt, length, q, x, min_intv, max_intv, mem, tmpvec):
     
     bwt_reverse_intvs(mem)
     return ret
+
+def bwt_gen_cnt_table(bwt):
+    """Sinh bảng đếm cho BWT."""
+    bwt.cnt_table = [0] * 256
+
+    for i in range(256):
+        x = 0
+        for j in range(4):
+            x |= (((i & 3) == j) +
+                  ((i >> 2 & 3) == j) +
+                  ((i >> 4 & 3) == j) +
+                  ((i >> 6) == j)) << (j << 3)
+        bwt.cnt_table[i] = x
+
+def bwt_restore_sa(filename, bwt):
+    """Khôi phục mảng suffix array (SA) từ tệp chỉ mục .sa"""
+    with open(filename, "rb") as fp:
+        primary = struct.unpack("Q", err_fread_noeof(fp, 8, 1))[0]
+        assert primary == bwt.primary, "SA-BWT inconsistency: primary is not the same."
+
+        # Bỏ qua 4 giá trị bwtint_t (32 byte)
+        err_fread_noeof(fp, 8, 4)
+
+        bwt.sa_intv = struct.unpack("Q", err_fread_noeof(fp, 8, 1))[0]
+        primary = struct.unpack("Q", err_fread_noeof(fp, 8, 1))[0]
+        assert primary == bwt.seq_len, "SA-BWT inconsistency: seq_len is not the same."
+
+        # Tính số lượng phần tử trong SA
+        bwt.n_sa = (bwt.seq_len + bwt.sa_intv) // bwt.sa_intv
+        bwt.sa = [-1] + list(struct.unpack(f"{bwt.n_sa - 1}Q", err_fread_noeof(fp, 8, bwt.n_sa - 1)))
+
+def bwt_restore_bwt(fn):
+    """Khôi phục BWT từ tệp .bwt"""
+    bwt = bwt_t()
+
+    # Mở file ở chế độ nhị phân
+    with open(fn, "rb") as fp:
+        # Tìm kích thước tệp
+        fp.seek(0, os.SEEK_END)
+        file_size = fp.tell()
+        bwt.bwt_size = (file_size - 5 * 8) >> 2  # sizeof(bwtint_t) = 8 bytes trong C
+
+        # Cấp phát bộ nhớ cho bwt
+        bwt.bwt = [0] * bwt.bwt_size
+
+        # Đọc dữ liệu
+        fp.seek(0, os.SEEK_SET)
+        bwt.primary = struct.unpack("<Q", fp.read(8))[0]  # bwtint_t (8 bytes)
+        bwt.L2[1:5] = struct.unpack("<4Q", fp.read(32))  # 4 * bwtint_t (32 bytes)
+        bwt.bwt = list(struct.unpack(f"<{bwt.bwt_size}I", fp.read(bwt.bwt_size * 4)))  # uint32_t (4 bytes mỗi phần tử)
+        bwt.seq_len = bwt.L2[4]
+
+    # Sinh bảng đếm
+    bwt_gen_cnt_table(bwt)
+
+    return bwt
