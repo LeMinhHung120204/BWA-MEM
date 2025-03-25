@@ -1,3 +1,5 @@
+import os
+
 # khai báo các hằng số
 class bntann1_t:
     """
@@ -191,6 +193,126 @@ def bns_fetch_seq(bns: bntseq_t, pac, beg, mid, end):
     assert seq is not None and length == end - beg  # Assertion failure should never happen
 
     return seq, beg, end, rid # Return sequence, begin, end, and reference ID
+
+
+def bns_restore_core(ann_filename, amb_filename, pac_filename):
+    bns = bntseq_t()
+    
+    # Read .ann
+    try:
+        with open(ann_filename, "r") as fp:
+            line = fp.readline()
+            parts = line.split()
+            if len(parts) < 3:
+                raise ValueError("Error reading .ann file")
+            bns.l_pac = int(parts[0])
+            bns.n_seqs = int(parts[1])
+            bns.seed = int(parts[2])
+            
+            bns.anns = [bntann1_t() for _ in range(bns.n_seqs)]
+            for i in range(bns.n_seqs):
+                line = fp.readline().strip()
+                parts = line.split()
+                if len(parts) < 2:
+                    raise ValueError("Error reading sequence info in .ann file")
+                
+                bns.anns[i].gi = int(parts[0])
+                bns.anns[i].name = parts[1]
+                
+                # Read annotation
+                anno = ""
+                while True:
+                    c = fp.read(1)
+                    if c == "\n" or not c:
+                        break
+                    anno += c
+                bns.anns[i].anno = anno.strip() if anno.strip() and anno.strip() != "(null)" else ""
+                
+                line = fp.readline().strip()
+                parts = line.split()
+                if len(parts) < 3:
+                    raise ValueError("Error reading sequence details in .ann file")
+                bns.anns[i].offset = int(parts[0])
+                bns.anns[i].len = int(parts[1])
+                bns.anns[i].n_ambs = int(parts[2])
+    except Exception as e:
+        raise RuntimeError(f"Error reading {ann_filename}: {e}")
+    
+    # Read .amb
+    try:
+        with open(amb_filename, "r") as fp:
+            line = fp.readline().strip()
+            parts = line.split()
+            if len(parts) < 3:
+                raise ValueError("Error reading .amb file")
+            
+            l_pac = int(parts[0])
+            n_seqs = int(parts[1])
+            bns.n_holes = int(parts[2])
+            
+            if l_pac != bns.l_pac or n_seqs != bns.n_seqs:
+                raise ValueError("Inconsistent .ann and .amb files")
+            
+            bns.ambs = [bntamb1_t() for _ in range(bns.n_holes)]
+            for i in range(bns.n_holes):
+                line = fp.readline().strip()
+                parts = line.split()
+                if len(parts) < 3:
+                    raise ValueError("Error reading .amb file")
+                
+                bns.ambs[i].offset = int(parts[0])
+                bns.ambs[i].len = int(parts[1])
+                bns.ambs[i].amb = parts[2][0]
+    except Exception as e:
+        raise RuntimeError(f"Error reading {amb_filename}: {e}")
+    
+    # Open .pac
+    try:
+        bns.fp_pac = open(pac_filename, "rb")
+    except Exception as e:
+        raise RuntimeError(f"Error opening {pac_filename}: {e}")
+    
+    return bns
+
+def bns_restore(prefix):
+    ann_filename = f"{prefix}.ann"
+    amb_filename = f"{prefix}.amb"
+    pac_filename = f"{prefix}.pac"
+    alt_filename = f"{prefix}.alt"
+    
+    bns = bns_restore_core(ann_filename, amb_filename, pac_filename)
+    if bns is None:
+        return None
+    
+    if os.path.exists(alt_filename):  # read .alt file if present
+        try:
+            with open(alt_filename, "r") as fp:
+                h = {}
+                
+                for i in range(bns.n_seqs):
+                    h[bns.anns[i].name] = i
+                
+                for line in fp:
+                    line = line.strip()
+                    if line and not line.startswith("@"):  # Ignore lines starting with '@'
+                        if line in h:
+                            bns.anns[h[line]].is_alt = 1
+        except Exception as e:
+            raise RuntimeError(f"Error reading {alt_filename}: {e}")
+    
+    return bns
+
+def bns_destroy(bns):
+    if bns is None:
+        return
+    if bns.fp_pac:
+        bns.fp_pac.close()  # err_fclose() có thể thay bằng close() nếu là file object
+    del bns.ambs
+    for ann in bns.anns:
+        del ann.name
+        del ann.anno
+    del bns.anns
+    del bns
 
 #===============================================================================
 # Test

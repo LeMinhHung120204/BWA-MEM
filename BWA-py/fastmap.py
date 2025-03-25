@@ -2,10 +2,12 @@ import sys
 import getopt
 import math
 import string
+import gzip
 
 from bwa import *
 from bwamem import *
 from bwashm import *
+from kthread import *
 
 class KtpAux:
     def __init__(self):
@@ -23,6 +25,27 @@ class KtpData:
         self.aux = aux
         self.n_seqs = n_seqs
         self.seqs = seqs
+
+def kseq_destroy(seq):
+    """Giải phóng tài nguyên của kseq nếu cần."""
+    if seq is not None:
+        del seq  # Python sẽ tự động thu hồi bộ nhớ
+
+def err_gzclose(fp):
+    """Đóng tệp gzip nếu đang mở."""
+    if fp is not None:
+        fp.close()
+
+def kclose(fp):
+    """Đóng tệp bình thường nếu đang mở."""
+    if fp is not None:
+        fp.close()
+
+def kseq_init(file_obj):
+    """Initialize a FASTA/FASTQ reader similar to kseq in C."""
+    if isinstance(file_obj, gzip.GzipFile):
+        file_obj = file_obj.read().decode()  # Đọc và giải nén nếu là file gzip
+    return iter(file_obj.splitlines())  # Trả về trình lặp các dòng
 
 def process(shared, step, _data):
     if step == 0:
@@ -121,6 +144,7 @@ def main_mem(argv):
     
     aux.opt = opt = mem_opt_init()
     opts, args = getopt.getopt(sys.argv[1:], "51qpaMCSPVYjuk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:o:f:W:x:G:h:y:K:X:H:F:z:")
+    optind = len(sys.argv) - len(args)  # Chỉ mục của đối số đầu tiên không phải tùy chọn
 
     for c, arg in opts:
         if c == '-k':
@@ -360,7 +384,56 @@ def main_mem(argv):
     bwa_fill_scmat(opt.a, opt.b, opt.mat)
     
     aux.idx = bwa_idx_load_from_shm(argv[arg])
-    # đang làm
+
+    if aux.idx is None:
+        aux.idx = bwa_idx_load(argv[optind], BWA_IDX_ALL)
+        if aux.idx is None:
+            return 1  # Memory leak issue in C, but handled automatically in Python
+    elif bwa_verbose >= 3:
+        print(f"[M::process_aux] load the bwa index from shared memory")
+    
+    if ignore_alt:
+        for i in range(aux.idx.bns.n_seqs):
+            aux.idx.bns.anns[i].is_alt = 0
+    
+    try:
+        with open(argv[optind + 1], "rb") as f:
+            aux.ks = kseq_init(f)
+    except FileNotFoundError:
+        if bwa_verbose >= 1:
+            print(f"[E::process_aux] fail to open file `{argv[optind + 1]}`.")
+        return 1
+    
+    if optind + 2 < len(argv):
+        if opt.flag & MEM_F_PE:
+            if bwa_verbose >= 2:
+                print(f"[W::process_aux] when '-p' is in use, the second query file is ignored.")
+        else:
+            try:
+                with open(argv[optind + 2], "rb") as f2:
+                    aux.ks2 = kseq_init(f2)
+                    opt.flag |= MEM_F_PE
+            except FileNotFoundError:
+                if bwa_verbose >= 1:
+                    print(f"[E::process_aux] fail to open file `{argv[optind + 2]}`.")
+                return 1
+            
+    bwa_print_sam_hdr(aux.idx.bns, hdr_line)
+    aux.actual_chunk_size = fixed_chunk_size if fixed_chunk_size > 0 else opt.chunk_size * opt.n_threads
+    kt_pipeline(1 if no_mt_io else 2, process, aux, 3)
+
+
+    del hdr_line
+    del opt
+    bwa_idx_destroy(aux.idx) 
+    kseq_destroy(aux.ks)
+    err_gzclose(fp)
+    kclose(ko)
+    if aux.ks2:
+        kseq_destroy(aux.ks2)
+        err_gzclose(fp2)
+        kclose(ko2)
+    return 0
 
 if __name__ == "__main__":
     pass
